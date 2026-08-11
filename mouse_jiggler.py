@@ -10,9 +10,11 @@ _ES_CONTINUOUS       = 0x80000000
 _ES_SYSTEM_REQUIRED  = 0x00000001
 _ES_DISPLAY_REQUIRED = 0x00000002
 
-_SW_RESTORE                   = 9
-_SPI_GETFOREGROUNDLOCKTIMEOUT = 0x2000
-_SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001
+_HWND_TOPMOST   = -1
+_HWND_NOTOPMOST = -2
+_SWP_NOSIZE     = 0x0001
+_SWP_NOMOVE     = 0x0002
+_SWP_NOACTIVATE = 0x0010
 
 pyautogui.FAILSAFE = False
 
@@ -42,36 +44,35 @@ def _get_window_rect(hwnd):
 
 
 def _find_citrix_hwnd():
-    """Gibt den Handle des ersten sichtbaren Citrix-Fensters zurück oder None."""
-    results = []
+    """Gibt bevorzugt den 'Citrix HDX Window'-Handle zurück, sonst erstes sichtbares Citrix-Fenster."""
+    preferred = []
+    fallback  = []
+
+    _SKIP = {"benachrichtigung", "connection center", "gdi+"}
 
     @_WNDENUMPROC
     def _cb(hwnd, _):
         if ctypes.windll.user32.IsWindowVisible(hwnd):
             buf = ctypes.create_unicode_buffer(256)
             ctypes.windll.user32.GetWindowTextW(hwnd, buf, 256)
-            if "citrix" in buf.value.lower():
-                results.append(hwnd)
+            title = buf.value.lower()
+            if "citrix hdx" in title:
+                preferred.append(hwnd)
+            elif "citrix" in title and not any(s in title for s in _SKIP):
+                fallback.append(hwnd)
         return True
 
     ctypes.windll.user32.EnumWindows(_cb, 0)
-    return results[0] if results else None
+    return (preferred or fallback or [None])[0]
 
 
-def _force_foreground(hwnd: int) -> None:
-    """Bringt ein Fenster zuverlässig in den Vordergrund.
-
-    SPI_SETFOREGROUNDLOCKTIMEOUT=0 deaktiviert die Windows-Foreground-Sperre
-    kurzzeitig — dadurch greift SetForegroundWindow auch aus Hintergrundprozessen.
-    """
-    user32 = ctypes.windll.user32
-    timeout = ctypes.c_uint(0)
-    user32.SystemParametersInfoW(_SPI_GETFOREGROUNDLOCKTIMEOUT, 0, ctypes.byref(timeout), 0)
-    user32.SystemParametersInfoW(_SPI_SETFOREGROUNDLOCKTIMEOUT, 0, 0, 0)
-    user32.ShowWindow(hwnd, _SW_RESTORE)
-    user32.BringWindowToTop(hwnd)
-    user32.SetForegroundWindow(hwnd)
-    user32.SystemParametersInfoW(_SPI_SETFOREGROUNDLOCKTIMEOUT, 0, timeout.value, 0)
+def _set_topmost(hwnd: int, topmost: bool) -> None:
+    """Setzt oder entfernt HWND_TOPMOST — ohne Fokus zu stehlen (SWP_NOACTIVATE)."""
+    after = _HWND_TOPMOST if topmost else _HWND_NOTOPMOST
+    ctypes.windll.user32.SetWindowPos(
+        hwnd, after, 0, 0, 0, 0,
+        _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE,
+    )
 
 
 def jiggle():
@@ -82,19 +83,18 @@ def jiggle():
     time.sleep(0.05)
     pyautogui.moveTo(ox, oy, duration=0)
 
-    # Citrix-Jiggle: Fenster in den Vordergrund holen, jiggle, zurück
+    # Citrix-Jiggle: Fenster per SetWindowPos(TOPMOST) nach oben schieben,
+    # Maus hinbewegen (liegt jetzt physisch über Citrix), jiggle, Z-Order wiederherstellen
     citrix_found = False
     hwnd = _find_citrix_hwnd()
     if hwnd:
         citrix_found = True
-        prev_hwnd = ctypes.windll.user32.GetForegroundWindow()
-
         left, top, right, bottom = _get_window_rect(hwnd)
         cx = (left + right) // 2
         cy = (top + bottom) // 2
 
-        _force_foreground(hwnd)
-        time.sleep(0.2)
+        _set_topmost(hwnd, True)
+        time.sleep(0.1)
 
         pyautogui.moveTo(cx, cy, duration=0.3)
         pyautogui.moveRel(10, 0, duration=0.2)
@@ -102,7 +102,7 @@ def jiggle():
         pyautogui.moveRel(-10, 0, duration=0.2)
         pyautogui.moveTo(ox, oy, duration=0.3)
 
-        _force_foreground(prev_hwnd)
+        _set_topmost(hwnd, False)
 
     ts = time.strftime("%H:%M:%S")
     return f"{ts} {'[+Citrix]' if citrix_found else '[lokal]'}"

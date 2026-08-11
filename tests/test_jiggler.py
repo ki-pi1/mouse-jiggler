@@ -21,9 +21,11 @@ def test_jiggle_mit_citrix_fenster():
          patch("mouse_jiggler.time.sleep"), \
          patch("mouse_jiggler._find_citrix_hwnd", return_value=12345), \
          patch("mouse_jiggler._get_window_rect", return_value=(0, 0, 800, 600)), \
-         patch("mouse_jiggler._force_foreground"), \
-         patch("mouse_jiggler.ctypes.windll.user32.GetForegroundWindow", return_value=99999):
+         patch("mouse_jiggler._set_topmost") as mock_topmost:
         result = mouse_jiggler.jiggle()
+
+        # _set_topmost: erst True, dann False
+        assert mock_topmost.call_args_list == [call(12345, True), call(12345, False)]
 
         # Lokales Jiggle: moveRel(5,0) + moveTo(100,200)
         # Citrix-Jiggle: moveTo(400,300) + moveRel(10,0) + moveRel(-10,0) + moveTo(100,200)
