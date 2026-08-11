@@ -8,7 +8,7 @@ def test_jiggle_bewegt_maus_und_stellt_position_wieder_her():
          patch("mouse_jiggler.time.sleep") as mock_sleep:
         result = mouse_jiggler.jiggle()
         mock_pos.assert_called_once()
-        mock_rel.assert_called_once_with(1, 0, duration=0)
+        mock_rel.assert_called_once_with(5, 0, duration=0)
         mock_sleep.assert_called_once_with(0.1)
         mock_to.assert_called_once_with(100, 200, duration=0)
         assert isinstance(result, str)

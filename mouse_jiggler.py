@@ -1,8 +1,14 @@
+import ctypes
 import sys
 import time
 import pyautogui
 
 INTERVAL = 30
+
+# Windows Power-State-Flags
+_ES_CONTINUOUS      = 0x80000000
+_ES_SYSTEM_REQUIRED = 0x00000001
+_ES_DISPLAY_REQUIRED = 0x00000002
 
 pyautogui.FAILSAFE = False
 
@@ -13,9 +19,18 @@ BANNER = """
 ╚══════════════════════════════════════╝
 """
 
+
+def _set_keep_awake(active: bool) -> None:
+    """Teilt Windows direkt mit, Display und System wach zu halten (oder freizugeben)."""
+    flags = _ES_CONTINUOUS
+    if active:
+        flags |= _ES_SYSTEM_REQUIRED | _ES_DISPLAY_REQUIRED
+    ctypes.windll.kernel32.SetThreadExecutionState(flags)
+
+
 def jiggle():
     x, y = pyautogui.position()
-    pyautogui.moveRel(1, 0, duration=0)
+    pyautogui.moveRel(5, 0, duration=0)
     time.sleep(0.1)
     pyautogui.moveTo(x, y, duration=0)
     return time.strftime("%H:%M:%S")
@@ -23,6 +38,7 @@ def jiggle():
 
 def main():
     print(BANNER)
+    _set_keep_awake(True)
     last_jiggle = "—"
     try:
         while True:
@@ -35,6 +51,7 @@ def main():
                 time.sleep(1)
             last_jiggle = jiggle()
     except KeyboardInterrupt:
+        _set_keep_awake(False)
         print("\n\nBeendet. Maus-Jiggler gestoppt.")
         sys.exit(0)
 
