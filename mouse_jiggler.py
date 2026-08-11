@@ -4,7 +4,7 @@ import sys
 import time
 import pyautogui
 
-INTERVAL = 30
+INTERVAL = 120
 
 _ES_CONTINUOUS       = 0x80000000
 _ES_SYSTEM_REQUIRED  = 0x00000001
@@ -34,7 +34,7 @@ pyautogui.FAILSAFE = False
 BANNER = """
 ╔══════════════════════════════════════╗
 ║         Mouse Jiggler aktiv          ║
-║  Intervall: 30 s  |  Ctrl+C: Stopp  ║
+║  Intervall: 2 min  |  Ctrl+C: Stopp ║
 ╚══════════════════════════════════════╝
 """
 
