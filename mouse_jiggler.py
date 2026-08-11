@@ -4,7 +4,7 @@ import sys
 import time
 import pyautogui
 
-INTERVAL = 120
+INTERVAL = 90
 
 _ES_CONTINUOUS       = 0x80000000
 _ES_SYSTEM_REQUIRED  = 0x00000001
@@ -13,6 +13,9 @@ _ES_DISPLAY_REQUIRED = 0x00000002
 _SWP_NOSIZE     = 0x0001
 _SWP_NOMOVE     = 0x0002
 _SWP_NOACTIVATE = 0x0010
+
+_SPI_GET_FG_TIMEOUT = 0x2000
+_SPI_SET_FG_TIMEOUT = 0x2001
 
 # SetWindowPos mit korrekten 64-bit argtypes (ohne argtypes wird -1 als c_int=32-bit
 # übergeben → Windows erhält 0x00000000FFFFFFFF statt 0xFFFFFFFFFFFFFFFF → Error 1400)
@@ -25,7 +28,7 @@ _SetWindowPos.argtypes = [
     ctypes.c_uint,    # uFlags
 ]
 
-_HWND_TOP       =  0   # oberste Position im normalen Z-Order
+_HWND_TOP       =  0
 _HWND_TOPMOST   = -1
 _HWND_NOTOPMOST = -2
 
@@ -34,7 +37,7 @@ pyautogui.FAILSAFE = False
 BANNER = """
 ╔══════════════════════════════════════╗
 ║         Mouse Jiggler aktiv          ║
-║  Intervall: 2 min  |  Ctrl+C: Stopp ║
+║  Intervall: 90 s   |  Ctrl+C: Stopp ║
 ╚══════════════════════════════════════╝
 """
 
@@ -57,10 +60,9 @@ def _get_window_rect(hwnd):
 
 
 def _find_citrix_hwnd():
-    """Findet das größte sichtbare Fenster von Citrix.DesktopViewer.App.exe anhand des Prozesses.
-    Sucht nach Prozessname statt Fenstertitel, da der Viewer-Titel variiert."""
+    """Findet das größte sichtbare Fenster von Citrix.DesktopViewer.App.exe anhand des Prozesses."""
     _TARGET = "citrix.desktopviewer.app.exe"
-    _PROCESS_QUERY = 0x1000  # PROCESS_QUERY_LIMITED_INFORMATION
+    _PROCESS_QUERY = 0x1000
     candidates = []
 
     @_WNDENUMPROC
@@ -86,16 +88,25 @@ def _find_citrix_hwnd():
 
     ctypes.windll.user32.EnumWindows(_cb, 0)
     if candidates:
-        candidates.sort(key=lambda x: -x[1])  # größtes Fenster = Hauptfenster
+        candidates.sort(key=lambda x: -x[1])
         return candidates[0][0]
     return None
 
 
 def _set_topmost(hwnd: int, topmost: bool) -> bool:
-    """Setzt oder entfernt HWND_TOPMOST. Gibt True zurück wenn erfolgreich."""
     after = _HWND_TOPMOST if topmost else _HWND_NOTOPMOST
     ok = _SetWindowPos(hwnd, after, 0, 0, 0, 0, _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
     return bool(ok)
+
+
+def _activate_window(hwnd: int) -> None:
+    """Setzt Vordergrundfenster via SPI-Trick (deaktiviert Foreground-Lock kurz)."""
+    user32 = ctypes.windll.user32
+    timeout = ctypes.c_uint(0)
+    user32.SystemParametersInfoW(_SPI_GET_FG_TIMEOUT, 0, ctypes.byref(timeout), 0)
+    user32.SystemParametersInfoW(_SPI_SET_FG_TIMEOUT, 0, 0, 0)
+    user32.SetForegroundWindow(hwnd)
+    user32.SystemParametersInfoW(_SPI_SET_FG_TIMEOUT, 0, timeout.value, 0)
 
 
 def jiggle():
@@ -106,7 +117,7 @@ def jiggle():
     time.sleep(0.05)
     pyautogui.moveTo(ox, oy, duration=0)
 
-    # Citrix-Jiggle
+    # Citrix-Jiggle: TOPMOST + Fokus + Maus + Shift-Taste → ICA leitet alles weiter
     citrix_status = "[lokal]"
     hwnd = _find_citrix_hwnd()
     if hwnd:
@@ -117,13 +128,21 @@ def jiggle():
 
         if _set_topmost(hwnd, True):
             time.sleep(0.1)
+            _activate_window(hwnd)        # Fokus für ICA-Weiterleitung
+            time.sleep(0.2)
+
             pyautogui.moveTo(cx, cy, duration=0.3)
             pyautogui.moveRel(10, 0, duration=0.2)
-            time.sleep(1.0)
+            time.sleep(0.2)
+            pyautogui.keyDown('shift')    # ICA-Keydown: Remote-Session sieht Aktivität
+            time.sleep(0.1)
+            pyautogui.keyUp('shift')
+            time.sleep(0.2)
             pyautogui.moveRel(-10, 0, duration=0.2)
             pyautogui.moveTo(ox, oy, duration=0.3)
+
             _set_topmost(hwnd, False)
-            # Vorheriges Fenster wieder an die Spitze des normalen Z-Orders
+            _activate_window(prev_hwnd)
             _SetWindowPos(prev_hwnd, _HWND_TOP, 0, 0, 0, 0,
                           _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
             citrix_status = "[+Citrix OK]"
@@ -143,7 +162,7 @@ def main():
         while True:
             for remaining in range(INTERVAL, 0, -1):
                 print(
-                    f"\r  Nächste Bewegung in: {remaining:2d} s  |  Letzte: {last_jiggle}   ",
+                    f"\r  Nächste Bewegung in: {remaining:3d} s  |  Letzte: {last_jiggle}   ",
                     end="",
                     flush=True,
                 )
