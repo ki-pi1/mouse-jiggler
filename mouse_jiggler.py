@@ -44,21 +44,21 @@ def _get_window_rect(hwnd):
 
 
 def _find_citrix_hwnd():
-    """Gibt bevorzugt den 'Citrix HDX Window'-Handle zurück, sonst erstes sichtbares Citrix-Fenster."""
+    """Sucht das sichtbare GDI+-Rendering-Fenster von Citrix.DesktopViewer (echte Session).
+    Fallback: andere sichtbare Citrix-Fenster außer Notifications."""
     preferred = []
     fallback  = []
-
-    _SKIP = {"benachrichtigung", "connection center", "gdi+"}
+    _SKIP = {"benachrichtigung", "connection center"}
 
     @_WNDENUMPROC
     def _cb(hwnd, _):
-        if ctypes.windll.user32.IsWindowVisible(hwnd):
-            buf = ctypes.create_unicode_buffer(256)
-            ctypes.windll.user32.GetWindowTextW(hwnd, buf, 256)
-            title = buf.value.lower()
-            if "citrix hdx" in title:
-                preferred.append(hwnd)
-            elif "citrix" in title and not any(s in title for s in _SKIP):
+        buf = ctypes.create_unicode_buffer(256)
+        ctypes.windll.user32.GetWindowTextW(hwnd, buf, 256)
+        title = buf.value.lower()
+        if "citrix.desktopviewer" in title:
+            preferred.append(hwnd)
+        elif "citrix" in title and ctypes.windll.user32.IsWindowVisible(hwnd):
+            if not any(s in title for s in _SKIP):
                 fallback.append(hwnd)
         return True
 
@@ -66,13 +66,14 @@ def _find_citrix_hwnd():
     return (preferred or fallback or [None])[0]
 
 
-def _set_topmost(hwnd: int, topmost: bool) -> None:
-    """Setzt oder entfernt HWND_TOPMOST — ohne Fokus zu stehlen (SWP_NOACTIVATE)."""
+def _set_topmost(hwnd: int, topmost: bool) -> bool:
+    """Setzt oder entfernt HWND_TOPMOST. Gibt True zurück wenn erfolgreich."""
     after = _HWND_TOPMOST if topmost else _HWND_NOTOPMOST
-    ctypes.windll.user32.SetWindowPos(
+    ok = ctypes.windll.user32.SetWindowPos(
         hwnd, after, 0, 0, 0, 0,
         _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE,
     )
+    return bool(ok)
 
 
 def jiggle():
@@ -83,29 +84,29 @@ def jiggle():
     time.sleep(0.05)
     pyautogui.moveTo(ox, oy, duration=0)
 
-    # Citrix-Jiggle: Fenster per SetWindowPos(TOPMOST) nach oben schieben,
-    # Maus hinbewegen (liegt jetzt physisch über Citrix), jiggle, Z-Order wiederherstellen
-    citrix_found = False
+    # Citrix-Jiggle
+    citrix_status = "[lokal]"
     hwnd = _find_citrix_hwnd()
     if hwnd:
-        citrix_found = True
         left, top, right, bottom = _get_window_rect(hwnd)
         cx = (left + right) // 2
         cy = (top + bottom) // 2
 
-        _set_topmost(hwnd, True)
-        time.sleep(0.1)
-
-        pyautogui.moveTo(cx, cy, duration=0.3)
-        pyautogui.moveRel(10, 0, duration=0.2)
-        time.sleep(1.0)
-        pyautogui.moveRel(-10, 0, duration=0.2)
-        pyautogui.moveTo(ox, oy, duration=0.3)
-
-        _set_topmost(hwnd, False)
+        if _set_topmost(hwnd, True):
+            time.sleep(0.1)
+            pyautogui.moveTo(cx, cy, duration=0.3)
+            pyautogui.moveRel(10, 0, duration=0.2)
+            time.sleep(1.0)
+            pyautogui.moveRel(-10, 0, duration=0.2)
+            pyautogui.moveTo(ox, oy, duration=0.3)
+            _set_topmost(hwnd, False)
+            citrix_status = "[+Citrix OK]"
+        else:
+            err = ctypes.windll.kernel32.GetLastError()
+            citrix_status = f"[Citrix ERR:{err}]"
 
     ts = time.strftime("%H:%M:%S")
-    return f"{ts} {'[+Citrix]' if citrix_found else '[lokal]'}"
+    return f"{ts} {citrix_status}"
 
 
 def main():

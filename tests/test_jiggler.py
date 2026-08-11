@@ -37,4 +37,4 @@ def test_jiggle_mit_citrix_fenster():
         assert mock_to.call_args_list[0] == call(100, 200, duration=0)
         assert mock_to.call_args_list[1] == call(400, 300, duration=0.3)
         assert mock_to.call_args_list[2] == call(100, 200, duration=0.3)
-        assert "[+Citrix]" in result
+        assert "[+Citrix OK]" in result
