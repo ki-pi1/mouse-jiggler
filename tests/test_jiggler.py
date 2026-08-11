@@ -26,11 +26,11 @@ def test_jiggle_mit_citrix_fenster():
         # Zweites/Drittes moveRel: Citrix-Jiggle (+5, -5)
         assert mock_rel.call_count == 3
         assert mock_rel.call_args_list[0] == call(5, 0, duration=0)
-        assert mock_rel.call_args_list[1] == call(5, 0, duration=0)
-        assert mock_rel.call_args_list[2] == call(-5, 0, duration=0)
+        assert mock_rel.call_args_list[1] == call(10, 0, duration=0.2)
+        assert mock_rel.call_args_list[2] == call(-10, 0, duration=0.2)
         # moveTo: zurück zur Ausgangsposition + Citrix-Mitte + zurück zur Ausgangsposition
         assert mock_to.call_count == 3
         assert mock_to.call_args_list[0] == call(100, 200, duration=0)
-        assert mock_to.call_args_list[1] == call(400, 300, duration=0)
-        assert mock_to.call_args_list[2] == call(100, 200, duration=0)
+        assert mock_to.call_args_list[1] == call(400, 300, duration=0.3)
+        assert mock_to.call_args_list[2] == call(100, 200, duration=0.3)
         assert "[+Citrix]" in result

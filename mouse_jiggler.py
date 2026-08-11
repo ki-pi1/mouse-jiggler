@@ -65,11 +65,11 @@ def jiggle():
         citrix_found = True
         cx = (rect[0] + rect[2]) // 2
         cy = (rect[1] + rect[3]) // 2
-        pyautogui.moveTo(cx, cy, duration=0)
-        pyautogui.moveRel(5, 0, duration=0)
-        time.sleep(0.05)
-        pyautogui.moveRel(-5, 0, duration=0)
-        pyautogui.moveTo(ox, oy, duration=0)
+        pyautogui.moveTo(cx, cy, duration=0.3)
+        pyautogui.moveRel(10, 0, duration=0.2)
+        time.sleep(1.0)
+        pyautogui.moveRel(-10, 0, duration=0.2)
+        pyautogui.moveTo(ox, oy, duration=0.3)
 
     ts = time.strftime("%H:%M:%S")
     return f"{ts} {'[+Citrix]' if citrix_found else '[lokal]'}"
