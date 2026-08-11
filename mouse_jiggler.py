@@ -25,6 +25,7 @@ _SetWindowPos.argtypes = [
     ctypes.c_uint,    # uFlags
 ]
 
+_HWND_TOP       =  0   # oberste Position im normalen Z-Order
 _HWND_TOPMOST   = -1
 _HWND_NOTOPMOST = -2
 
@@ -109,6 +110,7 @@ def jiggle():
     citrix_status = "[lokal]"
     hwnd = _find_citrix_hwnd()
     if hwnd:
+        prev_hwnd = ctypes.windll.user32.GetForegroundWindow()
         left, top, right, bottom = _get_window_rect(hwnd)
         cx = (left + right) // 2
         cy = (top + bottom) // 2
@@ -121,6 +123,9 @@ def jiggle():
             pyautogui.moveRel(-10, 0, duration=0.2)
             pyautogui.moveTo(ox, oy, duration=0.3)
             _set_topmost(hwnd, False)
+            # Vorheriges Fenster wieder an die Spitze des normalen Z-Orders
+            _SetWindowPos(prev_hwnd, _HWND_TOP, 0, 0, 0, 0,
+                          _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
             citrix_status = "[+Citrix OK]"
         else:
             err = ctypes.windll.kernel32.GetLastError()
