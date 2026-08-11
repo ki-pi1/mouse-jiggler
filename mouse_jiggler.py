@@ -10,11 +10,23 @@ _ES_CONTINUOUS       = 0x80000000
 _ES_SYSTEM_REQUIRED  = 0x00000001
 _ES_DISPLAY_REQUIRED = 0x00000002
 
-_HWND_TOPMOST   = -1
-_HWND_NOTOPMOST = -2
 _SWP_NOSIZE     = 0x0001
 _SWP_NOMOVE     = 0x0002
 _SWP_NOACTIVATE = 0x0010
+
+# SetWindowPos mit korrekten 64-bit argtypes (ohne argtypes wird -1 als c_int=32-bit
+# übergeben → Windows erhält 0x00000000FFFFFFFF statt 0xFFFFFFFFFFFFFFFF → Error 1400)
+_SetWindowPos = ctypes.windll.user32.SetWindowPos
+_SetWindowPos.restype  = ctypes.wintypes.BOOL
+_SetWindowPos.argtypes = [
+    ctypes.c_void_p,  # hWnd
+    ctypes.c_void_p,  # hWndInsertAfter  (-1 = TOPMOST, -2 = NOTOPMOST)
+    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+    ctypes.c_uint,    # uFlags
+]
+
+_HWND_TOPMOST   = -1
+_HWND_NOTOPMOST = -2
 
 pyautogui.FAILSAFE = False
 
@@ -81,10 +93,7 @@ def _find_citrix_hwnd():
 def _set_topmost(hwnd: int, topmost: bool) -> bool:
     """Setzt oder entfernt HWND_TOPMOST. Gibt True zurück wenn erfolgreich."""
     after = _HWND_TOPMOST if topmost else _HWND_NOTOPMOST
-    ok = ctypes.windll.user32.SetWindowPos(
-        hwnd, after, 0, 0, 0, 0,
-        _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE,
-    )
+    ok = _SetWindowPos(hwnd, after, 0, 0, 0, 0, _SWP_NOSIZE | _SWP_NOMOVE | _SWP_NOACTIVATE)
     return bool(ok)
 
 
