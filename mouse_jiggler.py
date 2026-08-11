@@ -10,9 +10,9 @@ _ES_CONTINUOUS       = 0x80000000
 _ES_SYSTEM_REQUIRED  = 0x00000001
 _ES_DISPLAY_REQUIRED = 0x00000002
 
-_SW_RESTORE    = 9
-_VK_MENU       = 0x12   # Alt-Taste
-_KEYEVENTF_UP  = 0x0002
+_SW_RESTORE                   = 9
+_SPI_GETFOREGROUNDLOCKTIMEOUT = 0x2000
+_SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001
 
 pyautogui.FAILSAFE = False
 
@@ -61,14 +61,17 @@ def _find_citrix_hwnd():
 def _force_foreground(hwnd: int) -> None:
     """Bringt ein Fenster zuverlässig in den Vordergrund.
 
-    Simulierter Alt-Tastendruck entsperrt Windows' Foreground-Lock,
-    danach greift SetForegroundWindow zuverlässig.
+    SPI_SETFOREGROUNDLOCKTIMEOUT=0 deaktiviert die Windows-Foreground-Sperre
+    kurzzeitig — dadurch greift SetForegroundWindow auch aus Hintergrundprozessen.
     """
     user32 = ctypes.windll.user32
-    user32.keybd_event(_VK_MENU, 0, 0, 0)
-    user32.keybd_event(_VK_MENU, 0, _KEYEVENTF_UP, 0)
+    timeout = ctypes.c_uint(0)
+    user32.SystemParametersInfoW(_SPI_GETFOREGROUNDLOCKTIMEOUT, 0, ctypes.byref(timeout), 0)
+    user32.SystemParametersInfoW(_SPI_SETFOREGROUNDLOCKTIMEOUT, 0, 0, 0)
     user32.ShowWindow(hwnd, _SW_RESTORE)
+    user32.BringWindowToTop(hwnd)
     user32.SetForegroundWindow(hwnd)
+    user32.SystemParametersInfoW(_SPI_SETFOREGROUNDLOCKTIMEOUT, 0, timeout.value, 0)
 
 
 def jiggle():
